@@ -1,0 +1,12 @@
+name    = "Motorecon"
+authors = ["omroot"]
+version = "0.1"
+[portscan]
+
+  [portscan.phase1]
+  command = "sudo masscan {target} -e {iface} -p0-65535 --rate {rate}"
+  desc    = "Full Masscan tcp scan here."
+
+  [portscan.phase2]
+  command = "sudo nmap -sSV -p{masscan_ports} {target} -Pn"
+  desc    = "Full Nmap tcp scan here to get the versions."
