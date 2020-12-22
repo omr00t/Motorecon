@@ -17,6 +17,7 @@ optional arguments:
                         Output file.
  ```
 ```
+pip3  install -r requirements.txt
 chmod +x motorecon.py
 sudo ./motorecon.py -i eth1 192.168.10.1 192.168.10.2 192.168.10.59
 ```
