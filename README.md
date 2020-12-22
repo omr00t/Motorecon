@@ -17,9 +17,12 @@ optional arguments:
                         Output file.
  ```
 ```
+chmod +x motorecon.py
 sudo ./motorecon.py -i eth1 192.168.10.1 192.168.10.2 192.168.10.59
 ```
 ![Alt text](screenshot.png?raw=true "Motorecon")
+
+Scans the whole port range through `masscan`. Enumrate service versions through `nmap`.
 
 
 You can customzie your `masscan` or `nmap` commands through modifying the config file `conf.toml`.
