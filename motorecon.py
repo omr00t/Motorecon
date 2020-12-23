@@ -217,7 +217,7 @@ def main():
                 f.close()
                 print(f"{white}Colored output has been saved to: {reset}{cyan}{args.output_file}.colored{reset}")
         except:
-            print(f"{red}Could'nt save output to file {args.output_file}{reset}")
+            print(f"{red}Couldn't save output to file {args.output_file}{reset}")
 
 if __name__ == "__main__":
     main()
