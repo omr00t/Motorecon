@@ -38,7 +38,7 @@ class Motorecon:
     def __str__(self):
         self.output = self.output.replace(self.target, f"{yellow}{self.target}{reset}") # Highlight IP address.
         for port in self.ports:                                                         # Highlight ports.
-            self.output = self.output.replace(str(port)+'/tcp', f"{yellow}{str(port)}{reset}/tcp") 
+            self.output = self.output.replace(f"\n{str(port)}/tcp", f"\n{yellow}{str(port)}{reset}/tcp") 
         return self.output
 
     def load_config(self):
