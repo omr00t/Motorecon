@@ -12,6 +12,8 @@ import datetime
 import argparse
 import ipaddress
 import os
+import re
+import pathlib
 
 
 # Colors: 
@@ -25,10 +27,11 @@ reset = colorama.Fore.RESET
 colors_list = [blue, white, cyan, red, yellow, lb, reset]
 
 class Motorecon:
-    def __init__(self, target, iface, rate):
+    def __init__(self, target, iface, rate, conf):
         self.target = target
         self.iface  = iface
         self.rate   = rate
+        self.conf   = conf
 
         self.output = ""
 
@@ -43,12 +46,24 @@ class Motorecon:
 
     def load_config(self):
         """
-        Loads the configuration file.
+        Loads the toml configuration file.
+
+        Priorities: 
+        1. Open the config file from the user's current environment folder.
+        If not found, then:
+        2. Try to open it from Motorecon's source folder.
         """
         try:
-            self.config = toml.load("conf.toml")
+            # Current folder
+            self.config = toml.load(self.conf)
         except:
-            print(f"{red}Couldn't find the config file(conf.toml){reset}")
+            try:
+                # Motorecon's folder
+                self.conf = os.path.join(pathlib.Path(__file__).parent.absolute(), self.conf)
+                self.config = toml.load(self.conf)
+            except:
+                print(f"{red}Couldn't find the config file({self.conf}){reset}")
+                sys.exit(1)
 
     @staticmethod
     def remove_colors(colored_text):
@@ -102,44 +117,57 @@ class Motorecon:
         return output
 
     def start(self):
-
+        """
+        A wrapper for the core scan process.
+        """
         start_time = datetime.datetime.now()
 
         # Phase 1 : Portscanning 
         self.motorecon_print(f"{white}Masscanning target: {reset}{cyan}{self.target}{reset}", True)
-        self.masscan_cmd = self.parse_item(self.config["portscan"]["phase1"]["command"], target=self.target, iface=self.iface, rate=self.rate)
+        self.masscan_cmd = self.parse_item(self.config["portscan"]["phase1"]["command"],\
+                target=self.target, iface=self.iface, rate=self.rate)
         self.masscan_ports = self.masscan()
         if(self.masscan_ports == None):
             self.motorecon_print(f"{red}No open TCP ports for {self.target}{reset}", True, True)
-            self.motorecon_print(f"{lb}========================================================================{reset}", False, True)
+            self.motorecon_print(\
+                    f"{lb}========================================================================{reset}",\
+                    False, True)
             return 0
         self.motorecon_print(f"{cyan}{self.target}{reset}{white} Masscanned successfully.{reset}", True)
 
         # Phase 2 : Service detection.
         self.motorecon_print(f"{white}Nmapping target: {reset}{cyan}{self.target}{reset}", True)
-        self.nmap_cmd = self.parse_item(self.config["portscan"]["phase2"]["command"], target=self.target, masscan_ports=self.masscan_ports)
+        self.nmap_cmd = self.parse_item(self.config["portscan"]["phase2"]["command"],\
+                target=self.target, masscan_ports=self.masscan_ports)
         self.nmap()
         self.motorecon_print(f"{cyan}{self.target}{reset}{white} Nmapped sucessfully.{reset}", True)
-        self.motorecon_print(f"{white}Scan has finished for {reset}{cyan}{self.target}{reset}", print_out=True)
+        self.motorecon_print(f"{white}Scan has finished for {reset}{cyan}{self.target}{reset}", True)
 
         # Calculate & Print the time taken for the scan.
         time_taken = datetime.datetime.now() - start_time
-        (lambda mins,secs: self.motorecon_print(f"{white}Time taken: {reset}{blue}{mins} minutes and {secs} seconds{reset}", False, True)) (*divmod(time_taken.total_seconds(), 60))
+        (lambda mins,secs: self.motorecon_print(\
+                f"{white}Time taken: {reset}{blue}{mins} minutes and {secs} seconds{reset}", False, True))\
+                (*divmod(time_taken.total_seconds(), 60))
 
-        self.motorecon_print(f"{lb}========================================================================{reset}", False, True)
+        self.motorecon_print(\
+                f"{lb}========================================================================{reset}", \
+                False, True)
 
     def masscan(self):
         """
-        Performs tcp scan for all ports using Masscan.
+        Performs tcp scan for all specified (through the config file) ports using Masscan.
         """
-        masscan_output = subprocess.run(self.masscan_cmd.split(' '), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        masscan_output = subprocess.run(self.masscan_cmd.split(' '), \
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         output_lines = str(masscan_output.stdout.decode('utf-8')).split("\n")
         self.ports = []
         for line in output_lines:
             try:
                 port = line.split(" ")[3].split("/")[0]
                 self.ports.append(port)
-                self.motorecon_print(f"{white}Discovered open port {reset}{cyan}{port}{reset}{white}/tcp on {reset}{cyan}{self.target}{reset}", True, False)
+                self.motorecon_print(f"{white}Discovered open port " \
+                        +f"{reset}{cyan}{port}{reset}{white}/tcp on {reset}{cyan}{self.target}{reset}", \
+                        True, False)
             except IndexError:
                 pass
         self.ports = sorted(self.ports)
@@ -150,18 +178,24 @@ class Motorecon:
 
     def nmap(self):
         """
-        Performs tcp scan for all open ports provided by Masscan using Nmap. This is performed to detect what service is running on each port.
+        Performs tcp scan for all open ports provided by Masscan using Nmap. 
+        This is performed to detect what service is running on each port.
         """
         nmap_output = subprocess.run(self.nmap_cmd.split(' '), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         self.motorecon_print(str(nmap_output.stdout.decode('utf-8')), False, True)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Scan targets with the speed of masscan. Enumerate ports with the functionality of Nmap.")
-    parser.add_argument('targets', action='store', help='IP address(es) (e.g. 192.168.1.1 192.168.1.2 ...)', nargs="*")
-    parser.add_argument('-i', '--interface', action='store', type=str, default='tun0', dest='iface', help='Interface to use while scanning. This is used during the Masscan process.')
-    parser.add_argument('-r', '--rate', action='store', type=str, default='1000', dest='rate', help='Transmit rate. This is used to tell Masscan how many packets it should send a second.')
+    parser = argparse.ArgumentParser(description=\
+            "Scan targets with the speed of masscan. Enumerate ports with the functionality of Nmap.")
+    parser.add_argument('targets', action='store', \
+            help='IP address(es) (e.g. 192.168.1.1 192.168.1.2 ...)', nargs="*")
+    parser.add_argument('-i', '--interface', action='store', type=str, default='tun0', dest='iface',\
+            help='Interface to use while scanning. This is used during the Masscan process.')
+    parser.add_argument('-r', '--rate', action='store', type=str, default='1000', dest='rate', \
+            help='Transmit rate. This is used to tell Masscan how many packets it should send a second.')
     parser.add_argument('-o', '--output', action='store', type=str, dest='output_file', help='Output file.')
+    parser.add_argument('-c', '--config', action='store', type=str, default='conf.toml', dest='config_file', help='toml config file.')
 
     args = parser.parse_args()
 
@@ -188,11 +222,12 @@ def main():
 
     result = ""
     start_time = datetime.datetime.now()
-    print(f"{yellow}{len(args.targets)}{reset}{white} targets to scan..{reset}")
+    print(f"{yellow}{len(args.targets)}{reset}{white}",
+            f"target{'s' if len(args.targets)>1 else ''} to scan..{reset}")
     try:
         for target in args.targets:
             # Run Motorecon against each target.
-            obj = Motorecon(target, args.iface, args.rate)    
+            obj = Motorecon(target, args.iface, args.rate, args.config_file)    
             result += str(obj)
     except KeyboardInterrupt:
         print("User interrupt.")
@@ -203,7 +238,8 @@ def main():
 
     # Print total time taken:
     time_taken = datetime.datetime.now() - start_time
-    (lambda mins,secs: print(f"{lb}Total time taken: {reset}{blue}{mins} minutes and {secs} seconds{reset}")) (*divmod(time_taken.total_seconds(), 60))
+    (lambda mins,secs: print(f"{lb}Total time taken: {reset}{blue}{mins} minutes and {secs} seconds{reset}"))\
+            (*divmod(time_taken.total_seconds(), 60))
 
     # Save output to a file (optionally)
     if(args.output_file):
