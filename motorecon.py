@@ -246,11 +246,9 @@ def main():
         try:
             with open(args.output_file, "w") as f:
                 f.write(Motorecon.remove_colors(result))
-                f.close()
                 print(f"{white}Output has been saved to: {reset}{cyan}{args.output_file}{reset}")
             with open(args.output_file+'.colored', "w") as f:
                 f.write(result)
-                f.close()
                 print(f"{white}Colored output has been saved to: {reset}{cyan}{args.output_file}.colored{reset}")
         except:
             print(f"{red}Couldn't save output to file {args.output_file}{reset}")
