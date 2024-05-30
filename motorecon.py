@@ -14,6 +14,8 @@ import ipaddress
 import os
 import re
 import pathlib
+import threading
+import queue
 
 
 # Colors: 
@@ -25,6 +27,14 @@ yellow= colorama.Fore.YELLOW
 lb    = colorama.Fore.LIGHTBLACK_EX
 reset = colorama.Fore.RESET
 colors_list = [blue, white, cyan, red, yellow, lb, reset]
+
+def run_motorecon(target, args, results):
+	try:
+		obj = Motorecon(target, args.iface, args.rate, args.config_file)
+		results.put(str(obj))
+	except KeyboardInterrupt:
+		print("User interrupt.")
+		sys.exit(1)
 
 class Motorecon:
     def __init__(self, target, iface, rate, conf):
@@ -75,7 +85,7 @@ class Motorecon:
     @staticmethod
     def is_ipv4(ip):
         try:
-            ipaddress.IPv4Address(ip)
+            ipaddress.IPv4Network(ip)
             return True
         except:
             return False
@@ -142,6 +152,9 @@ class Motorecon:
         self.nmap()
         self.motorecon_print(f"{cyan}{self.target}{reset}{white} Nmapped sucessfully.{reset}", True)
         self.motorecon_print(f"{white}Scan has finished for {reset}{cyan}{self.target}{reset}", True)
+
+
+        print(self) # print the result
 
         # Calculate & Print the time taken for the scan.
         time_taken = datetime.datetime.now() - start_time
@@ -225,21 +238,32 @@ def main():
     print(f"{yellow}{len(args.targets)}{reset}{white}",
             f"target{'s' if len(args.targets)>1 else ''} to scan..{reset}")
     try:
+        threads = []
+        results = queue.Queue()
+
         for target in args.targets:
-            # Run Motorecon against each target.
-            obj = Motorecon(target, args.iface, args.rate, args.config_file)    
-            result += str(obj)
+            for host in ipaddress.IPv4Network(target):
+                # Run Motorecon against each target.
+                thread = threading.Thread(target=run_motorecon, args=(str(host), args, results))
+                threads.append(thread)
+                thread.start()
     except KeyboardInterrupt:
         print("User interrupt.")
         sys.exit(1)
 
-    # Final result
-    print(result)
+    # Wait for all threads to complete
+    for thread in threads:
+        thread.join()
 
     # Print total time taken:
     time_taken = datetime.datetime.now() - start_time
     (lambda mins,secs: print(f"{lb}Total time taken: {reset}{blue}{mins} minutes and {secs} seconds{reset}"))\
             (*divmod(time_taken.total_seconds(), 60))
+
+
+    # Retrieve the results from the queue
+    while not results.empty():
+        result += results.get()
 
     # Save output to a file (optionally)
     if(args.output_file):
